@@ -2,341 +2,303 @@ local Library = {}
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 
--- Constructor for creating new windows
 function Library:CreateWindow(name)
-	local GUI = game:GetObjects("paste")[1]
-	if syn then
-		syn.protect_gui(GUI)
-	end
-	GUI.Parent = game.CoreGui
-
-	local Window = {
-		Tabs = {},
-		CurrentTab = nil,
-		Dragging = false,
-		Resizing = false
-	}
-
-	-- Set window name
-	GUI.Base.FunctionHolder.PageName.Text = name
-	GUI.Base.SelectionHolder.NameAndLogoHolder.Name.Text = name
-
-	-- Make window draggable
-	local dragInput, dragStart, startPos
-
-	GUI.Base.InputBegan:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Window.Dragging = true
-			dragStart = input.Position
-			startPos = GUI.Base.Position
-
-			input.Changed:Connect(function()
-				if input.UserInputState == Enum.UserInputState.End then
-					Window.Dragging = false
-				end
-			end)
-		end
-	end)
-
-	GUI.Base.InputChanged:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseMovement then
-			dragInput = input
-		end
-	end)
-
-	UserInputService.InputChanged:Connect(function(input)
-		if input == dragInput and Window.Dragging then
-			local delta = input.Position - dragStart
-			GUI.Base.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-		end
-	end)
-
-	-- Make window resizable
-	local function updateSize(input)
-		local delta = input.Position - dragStart
-		local newSize = UDim2.new(
-			startPos.X.Scale, 
-			math.clamp(startPos.X.Offset + delta.X, 600, 800),
-			startPos.Y.Scale,
-			math.clamp(startPos.Y.Offset + delta.Y, 400, 600)
-		)
-		GUI.Base.Size = newSize
-	end
-
-	GUI.Base.PageSelectHolder.Resize.MouseButton1Down:Connect(function()
-		Window.Resizing = true
-		dragStart = UserInputService:GetMouseLocation()
-		startPos = GUI.Base.Size
-
-		UserInputService.InputChanged:Connect(function(input)
-			if input.UserInputType == Enum.UserInputType.MouseMovement and Window.Resizing then
-				updateSize(input)
-			end
-		end)
-	end)
-
-	UserInputService.InputEnded:Connect(function(input)
-		if input.UserInputType == Enum.UserInputType.MouseButton1 then
-			Window.Resizing = false
-		end
-	end)
-
-	-- Create Tab function
-	function Window:CreateTab(name, icon)
-		local Tab = {
-			Buttons = {},
-			Toggles = {},
-			Inputs = {},
-			Dropdowns = {}
-		}
-
-		local newTab = GUI.Base.SelectionHolder.TabSelectionHolder.ScrollingFrame.tab1:Clone()
-		newTab.Text = name
-		if icon then
-			newTab.Imagebuttontab1.Image = icon
-		end
-		newTab.Parent = GUI.Base.SelectionHolder.TabSelectionHolder.ScrollingFrame
-
-		-- Tab selection handling
-		newTab.MouseButton1Click:Connect(function()
-			if Window.CurrentTab then
-				-- Fade out current tab
-				TweenService:Create(Window.CurrentTab, TweenInfo.new(0.2), {
-					TextTransparency = 0.8,
-					BackgroundTransparency = 1
-				}):Play()
-			end
-
-			-- Fade in new tab
-			TweenService:Create(newTab, TweenInfo.new(0.2), {
-				TextTransparency = 0,
-				BackgroundTransparency = 0
-			}):Play()
-
-			Window.CurrentTab = newTab
-		end)
-
-		-- Create Button function
-		function Tab:CreateButton(name, callback)
-			local button = GUI.Base.FunctionHolder.PageRight.Button:Clone()
-			button.Name = name
-			button.DropdownNameFunction.Text = name
-			button.Parent = GUI.Base.FunctionHolder.PageRight
-
-			button.ButtonHolder.Button.MouseButton1Click:Connect(function()
-				if callback then
-					callback()
-				end
-			end)
-
-			return button
-		end
-
-		-- Create Toggle function
-		function Tab:CreateToggle(name, default, callback)
-			local toggle = GUI.Base.FunctionHolder.PageLeft.Toggle:Clone()
-			toggle.Name = name
-			toggle.ToggleNameFunction.Text = name
-			toggle.Parent = GUI.Base.FunctionHolder.PageLeft
-
-			local enabled = default or false
-			local toggleButton = toggle.ToggleTextLabelDescription.FrameToggleOff.Toggle
-
-			local function updateToggle()
-				local pos = enabled and UDim2.new(0.6, 0, 0.12, 0) or UDim2.new(0, 0, 0.12, 0)
-				local color = enabled and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(122, 122, 122)
-
-				TweenService:Create(toggleButton, TweenInfo.new(0.2), {
-					Position = pos,
-					BackgroundColor3 = color
-				}):Play()
-
-				if callback then
-					callback(enabled)
-				end
-			end
-
-			toggle.ToggleTextLabelDescription.FrameToggleOff.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					enabled = not enabled
-					updateToggle()
-				end
-			end)
-
-			updateToggle()
-			return toggle
-		end
-
-		-- Create Input function
-		function Tab:CreateInput(name, placeholder, callback)
-			local input = GUI.Base.FunctionHolder.PageLeft.Input:Clone()
-			input.Name = name
-			input.InputNameFunction.Text = name
-			input.Parent = GUI.Base.FunctionHolder.PageLeft
-
-			local textBox = input.InputTextLabelDescription.FrameInput.Inputtext
-			textBox.PlaceholderText = placeholder or "Enter text..."
-
-			textBox.FocusLost:Connect(function(enterPressed)
-				if enterPressed and callback then
-					callback(textBox.Text)
-				end
-			end)
-
-			return input
-		end
-
-		-- Create Dropdown function
-		function Tab:CreateDropdown(name, options, callback)
-			local dropdown = GUI.Base.FunctionHolder.PageRight.Dropdown:Clone()
-			dropdown.Name = name
-			dropdown.DropdownNameFunction.Text = name
-			dropdown.Parent = GUI.Base.FunctionHolder.PageRight
-
-			local dropdownButton = dropdown.DropdownHolder.dropdownOff
-			local resultFrame = dropdown.ResultDropdownOn
-			resultFrame.Visible = false
-
-			-- Populate options
-			for _, option in ipairs(options) do
-				local button = resultFrame.TextButton:Clone()
-				button.Text = option
-				button.Parent = resultFrame
-
-				button.MouseButton1Click:Connect(function()
-					dropdownButton.Text = option
-					resultFrame.Visible = false
-					if callback then
-						callback(option)
-					end
-				end)
-			end
-
-			dropdownButton.MouseButton1Click:Connect(function()
-				resultFrame.Visible = not resultFrame.Visible
-			end)
-
-			return dropdown
-		end
-		
-		-- Add to the Tab function after CreateDropdown
-		function Tab:CreateSlider(name, min, max, default, callback)
-			local slider = GUI.Base.FunctionHolder.PageRight.Button:Clone() -- Using Button as base template
-			slider.Name = name
-			slider.DropdownNameFunction.Text = name
-			slider.Parent = GUI.Base.FunctionHolder.PageRight
-
-			-- Set up slider holder
-			local sliderHolder = slider.ButtonHolder
-			sliderHolder.Name = "SliderHolder"
-			sliderHolder.Button:Destroy() -- Remove button template
-
-			-- Create slider background
-			local sliderBg = Instance.new("Frame")
-			sliderBg.Name = "SliderBackground"
-			sliderBg.BackgroundColor3 = Color3.fromRGB(15, 15, 15)
-			sliderBg.BorderSizePixel = 0
-			sliderBg.Position = UDim2.new(0.055, 0, 0, 0)
-			sliderBg.Size = UDim2.new(0, 177, 0, 12)
-			sliderBg.Parent = sliderHolder
-
-			local bgCorner = Instance.new("UICorner")
-			bgCorner.CornerRadius = UDim.new(0, 7)
-			bgCorner.Parent = sliderBg
-
-			-- Create slider fill
-			local sliderFill = Instance.new("Frame")
-			sliderFill.Name = "SliderFill"
-			sliderFill.BackgroundColor3 = Color3.fromRGB(75, 75, 75)
-			sliderFill.BorderSizePixel = 0
-			sliderFill.Size = UDim2.new(0, 0, 1, 0) -- Will be updated based on value
-			sliderFill.Parent = sliderBg
-
-			local fillCorner = Instance.new("UICorner")
-			fillCorner.CornerRadius = UDim.new(0, 7)
-			fillCorner.Parent = sliderFill
-
-			-- Create slider handle
-			local handle = Instance.new("Frame")
-			handle.Name = "Handle"
-			handle.BackgroundColor3 = Color3.fromRGB(112, 112, 112)
-			handle.BorderSizePixel = 0
-			handle.Position = UDim2.new(0, -6, 0.5, -11) -- Center vertically, offset by half width
-			handle.Size = UDim2.new(0, 12, 0, 22)
-			handle.Parent = sliderFill
-
-			local handleCorner = Instance.new("UICorner")
-			handleCorner.Parent = handle
-
-			-- Create value display
-			local valueDisplay = Instance.new("TextLabel")
-			valueDisplay.Name = "ValueDisplay"
-			valueDisplay.BackgroundTransparency = 1
-			valueDisplay.Position = UDim2.new(0.5, 0, -1, 0)
-			valueDisplay.Size = UDim2.new(0, 50, 0, 20)
-			valueDisplay.Font = Enum.Font.SourceSans
-			valueDisplay.TextColor3 = Color3.fromRGB(122, 122, 122)
-			valueDisplay.TextSize = 14
-			valueDisplay.Parent = sliderBg
-
-			-- Slider functionality
-			local dragging = false
-			local value = default or min
-
-			local function updateSlider(input)
-				local pos = input.Position
-				local abs = sliderBg.AbsolutePosition
-				local size = sliderBg.AbsoluteSize
-
-				local relative = math.clamp((pos.X - abs.X) / size.X, 0, 1)
-				value = min + (max - min) * relative
-
-				-- Update visual elements
-				sliderFill.Size = UDim2.new(relative, 0, 1, 0)
-				valueDisplay.Text = math.round(value)
-
-				if callback then
-					callback(value)
-				end
-			end
-
-			sliderBg.InputBegan:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					dragging = true
-					updateSlider(input)
-				end
-			end)
-
-			UserInputService.InputChanged:Connect(function(input)
-				if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
-					updateSlider(input)
-				end
-			end)
-
-			UserInputService.InputEnded:Connect(function(input)
-				if input.UserInputType == Enum.UserInputType.MouseButton1 then
-					dragging = false
-				end
-			end)
-
-			-- Set initial value
-			local initialRelative = (default - min) / (max - min)
-			sliderFill.Size = UDim2.new(initialRelative, 0, 1, 0)
-			valueDisplay.Text = tostring(default)
-
-			return slider
-		end
-
-		self.Tabs[name] = Tab
-		return Tab
-	end
-
-	-- Delete UI function
-	GUI.Base.PageSelectHolder.DeleteUi.MouseButton1Click:Connect(function()
-		GUI:Destroy()
-	end)
-
-	return Window
+    -- Clone the ScreenGui template
+    local gui = script.Parent:WaitForChild("Library"):Clone()
+    gui.Name = name
+    gui.Parent = game.Players.LocalPlayer.PlayerGui
+    
+    local window = {}
+    local currentTab = nil
+    local tabs = {}
+    
+    -- Set window name
+    gui.Base.SelectionHolder.NameAndLogoHolder.Name.Text = name
+    
+    -- Dragging functionality
+    local dragging
+    local dragInput
+    local dragStart
+    local startPos
+    
+    local function updateDrag(input)
+        local delta = input.Position - dragStart
+        gui.Base.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    
+    gui.Base.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 then
+            dragging = true
+            dragStart = input.Position
+            startPos = gui.Base.Position
+            
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    
+    gui.Base.InputChanged:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseMovement then
+            dragInput = input
+        end
+    end)
+    
+    UserInputService.InputChanged:Connect(function(input)
+        if input == dragInput and dragging then
+            updateDrag(input)
+        end
+    end)
+    
+    -- Tab functionality
+    function window:CreateTab(tabName, imageId)
+        local tab = {}
+        local tabButton = gui.Base.SelectionHolder.TabSelectionHolder.ScrollingFrame.tab1:Clone()
+        tabButton.Parent = gui.Base.SelectionHolder.TabSelectionHolder.ScrollingFrame
+        tabButton.Text = tabName
+        tabButton.Name = tabName
+        
+        if imageId then
+            tabButton.Imagebuttontab1.Image = imageId
+        end
+        
+        local pageLeft = gui.Base.FunctionHolder.PageLeft:Clone()
+        pageLeft.Name = tabName .. "Page"
+        pageLeft.Parent = gui.Base.FunctionHolder
+        pageLeft.Visible = false
+        
+        tabs[tabName] = {button = tabButton, page = pageLeft}
+        
+        -- Tab selection handling
+        tabButton.MouseButton1Click:Connect(function()
+            if currentTab then
+                tabs[currentTab].page.Visible = false
+                tabs[currentTab].button.BackgroundTransparency = 1
+                tabs[currentTab].button.TextTransparency = 0.8
+                tabs[currentTab].button.Imagebuttontab1.ImageTransparency = 0.8
+            end
+            
+            pageLeft.Visible = true
+            tabButton.BackgroundTransparency = 0
+            tabButton.TextTransparency = 0
+            tabButton.Imagebuttontab1.ImageTransparency = 0
+            currentTab = tabName
+        end)
+        
+        if currentTab == nil then
+            currentTab = tabName
+            pageLeft.Visible = true
+            tabButton.BackgroundTransparency = 0
+            tabButton.TextTransparency = 0
+            tabButton.Imagebuttontab1.ImageTransparency = 0
+        end
+        
+        -- Element creation functions
+        function tab:CreateToggle(name, description, callback)
+            local toggle = gui.Base.FunctionHolder.PageLeft.Toggle:Clone()
+            toggle.Parent = pageLeft
+            toggle.ToggleNameFunction.Text = name
+            toggle.ToggleTextLabelDescription.Text = description
+            
+            local enabled = false
+            local toggleButton = toggle.ToggleTextLabelDescription.FrameToggleOff.Toggle
+            
+            toggleButton.MouseButton1Click:Connect(function()
+                enabled = not enabled
+                
+                local goal = {
+                    Position = enabled and UDim2.new(0.6, 0, 0.12, 0) or UDim2.new(0, 0, 0.12, 0),
+                    BackgroundColor3 = enabled and Color3.fromRGB(200, 200, 200) or Color3.fromRGB(122, 122, 122)
+                }
+                
+                TweenService:Create(toggleButton, TweenInfo.new(0.2), goal):Play()
+                
+                if callback then
+                    callback(enabled)
+                end
+            end)
+            
+            return toggle
+        end
+        
+        function tab:CreateInput(name, description, default, callback)
+            local input = gui.Base.FunctionHolder.PageLeft.Input:Clone()
+            input.Parent = pageLeft
+            input.InputNameFunction.Text = name
+            input.InputTextLabelDescription.Text = description
+            input.InputTextLabelDescription.FrameInput.Inputtext.Text = default or ""
+            
+            input.InputTextLabelDescription.FrameInput.Inputtext.FocusLost:Connect(function()
+                if callback then
+                    callback(input.InputTextLabelDescription.FrameInput.Inputtext.Text)
+                end
+            end)
+            
+            return input
+        end
+        
+        function tab:CreateKeybind(name, description, default, callback)
+            local keybind = gui.Base.FunctionHolder.PageLeft.Keybind:Clone()
+            keybind.Parent = pageLeft
+            keybind.KeybindNameFunction.Text = name
+            keybind.KeybindTextLabelDescription.Text = description
+            keybind.KeybindTextLabelDescription.FrameInputHolder.KeybindInput.Text = default or "None"
+            
+            local listening = false
+            local currentKey = default
+            
+            keybind.KeybindTextLabelDescription.FrameInputHolder.KeybindInput.MouseButton1Click:Connect(function()
+                listening = true
+                keybind.KeybindTextLabelDescription.FrameInputHolder.KeybindInput.Text = "..."
+            end)
+            
+            UserInputService.InputBegan:Connect(function(input)
+                if listening then
+                    if input.UserInputType == Enum.UserInputType.Keyboard then
+                        currentKey = input.KeyCode
+                        keybind.KeybindTextLabelDescription.FrameInputHolder.KeybindInput.Text = tostring(currentKey)
+                        listening = false
+                        if callback then
+                            callback(currentKey)
+                        end
+                    end
+                elseif input.KeyCode == currentKey then
+                    if callback then
+                        callback(currentKey)
+                    end
+                end
+            end)
+            
+            return keybind
+        end
+        
+        function tab:CreateDropdown(name, description, options, callback)
+            local dropdown = gui.Base.FunctionHolder.PageRight.Dropdown:Clone()
+            dropdown.Parent = pageLeft
+            dropdown.DropdownNameFunction.Text = name
+            dropdown.DropdownOffTextLabelDescription.Text = description
+            
+            local isOpen = false
+            local resultDropdown = dropdown.DropdownOnTextLabelDescription.ResultDropdownOn
+            resultDropdown.Visible = false
+            
+            -- Clear default buttons
+            for _, child in ipairs(resultDropdown:GetChildren()) do
+                if child:IsA("TextButton") then
+                    child:Destroy()
+                end
+            end
+            
+            -- Create option buttons
+            for _, option in ipairs(options) do
+                local button = Instance.new("TextButton")
+                button.Parent = resultDropdown
+                button.Size = UDim2.new(0, 75, 0, 25)
+                button.BackgroundTransparency = 1
+                button.Text = option
+                button.TextColor3 = Color3.fromRGB(126, 126, 126)
+                button.TextSize = 14
+                button.Font = Enum.Font.SourceSans
+                button.TextXAlignment = Enum.TextXAlignment.Left
+                
+                local padding = Instance.new("UIPadding")
+                padding.Parent = button
+                padding.PaddingLeft = UDim.new(0, 8)
+                
+                button.MouseButton1Click:Connect(function()
+                    dropdown.DropdownOffTextLabelDescription.DropdownHolder.dropdownOff.Text = option
+                    resultDropdown.Visible = false
+                    isOpen = false
+                    if callback then
+                        callback(option)
+                    end
+                end)
+            end
+            
+            dropdown.DropdownOffTextLabelDescription.DropdownHolder.dropdownOff.MouseButton1Click:Connect(function()
+                isOpen = not isOpen
+                resultDropdown.Visible = isOpen
+            end)
+            
+            return dropdown
+        end
+        
+        function tab:CreateButton(name, description, callback)
+            local button = gui.Base.FunctionHolder.PageRight.Button:Clone()
+            button.Parent = pageLeft
+            button.ButtonNameFunction.Text = name
+            button.ButtonHolder.ButtonHolderButtonPlace.TextButton.Text = description
+            
+            button.ButtonHolder.ButtonHolderButtonPlace.TextButton.MouseButton1Click:Connect(function()
+                if callback then
+                    callback()
+                end
+            end)
+            
+            return button
+        end
+        
+        function tab:CreateSlider(name, min, max, default, callback)
+            local slider = gui.Base.FunctionHolder.PageRight.Silder:Clone()
+            slider.Parent = pageLeft
+            slider.SilderBarNameFunction.Text = name
+            
+            local sliderBar = slider.SilderHolder.SilderBar
+            local sliderDrag = sliderBar.SilderDrag
+            local sliderFill = sliderBar.SilderBar50
+            
+            local dragging = false
+            local value = default or min
+            
+            local function updateSlider(input)
+                local pos = math.clamp((input.Position.X - sliderBar.AbsolutePosition.X) / sliderBar.AbsoluteSize.X, 0, 1)
+                local newValue = math.floor(min + (max - min) * pos)
+                value = newValue
+                
+                sliderDrag.Position = UDim2.new(pos, -6, -0.417, 0)
+                sliderFill.Size = UDim2.new(pos, 0, 1, 0)
+                
+                if callback then
+                    callback(value)
+                end
+            end
+            
+            sliderDrag.MouseButton1Down:Connect(function()
+                dragging = true
+            end)
+            
+            UserInputService.InputEnded:Connect(function(input)
+                if input.UserInputType == Enum.UserInputType.MouseButton1 then
+                    dragging = false
+                end
+            end)
+            
+            UserInputService.InputChanged:Connect(function(input)
+                if dragging and input.UserInputType == Enum.UserInputType.MouseMovement then
+                    updateSlider(input)
+                end
+            end)
+            
+            -- Set initial value
+            local initialPos = (value - min) / (max - min)
+            sliderDrag.Position = UDim2.new(initialPos, -6, -0.417, 0)
+            sliderFill.Size = UDim2.new(initialPos, 0, 1, 0)
+            
+            return slider
+        end
+        
+        return tab
+    end
+    
+    -- Close button functionality
+    gui.Base.PageSelectHolder.DeleteUi.MouseButton1Click:Connect(function()
+        gui:Destroy()
+    end)
+    
+    return window
 end
 
 return Library
+
